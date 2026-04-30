@@ -7,6 +7,14 @@
 #include <QJsonObject>
 #include <QMessageBox>
 
+namespace {
+enum IdCheckResult {
+    FileError = -1,
+    NotDuplicate = 0,
+    Duplicate = 1
+};
+}
+
 SignupDialog::SignupDialog(QWidget *parent) :
     QDialog(parent),
     ui(new Ui::SignupDialog)
@@ -26,25 +34,34 @@ void SignupDialog::on_btnCreateAccount_clicked()
     QString pw = ui->editPassword->text().trimmed();
     QString confirmpw = ui->editPasswordConfirm->text().trimmed();
 
-    if (name.isEmpty() || id.isEmpty() || pw.isEmpty()) {
+    if (name.isEmpty() || id.isEmpty() || pw.isEmpty() || confirmpw.isEmpty()) {
         QMessageBox::warning(this, "Error", "모든 항목을 입력해주세요.");
         return;
     }
 
-    if (pw!=confirmpw){
-        QMessageBox::warning(this, "Error", "비밀번호가 일치하지않습니다.");
+    if (pw != confirmpw) {
+        QMessageBox::warning(this, "Error", "비밀번호가 일치하지 않습니다.");
         return;
     }
 
-    if (isIdDuplicate(id)) {
+    int result = isIdDuplicate(id);
+
+    if (result == FileError) {
+        QMessageBox::warning(this, "Error", "회원 정보 파일을 읽을 수 없습니다.");
+        return;
+    }
+
+    if (result == Duplicate) {
         QMessageBox::warning(this, "Error", "이미 존재하는 아이디입니다.");
         return;
     }
 
-
-    if (saveMember(name, id, pw)) {
-        accept();
+    if (!saveMember(name, id, pw)) {
+        QMessageBox::warning(this, "Error", "회원 정보 저장에 실패했습니다.");
+        return;
     }
+
+    accept();
 }
 
 void SignupDialog::on_btnCancel_clicked()
@@ -52,38 +69,56 @@ void SignupDialog::on_btnCancel_clicked()
     reject();
 }
 
-bool SignupDialog::isIdDuplicate(const QString &id)
+int SignupDialog::isIdDuplicate(const QString &id)
 {
     QFile file(SessionManager::getInstance().getMembersJsonPath());
+
+    if (!file.exists()) {
+        return NotDuplicate;
+    }
+
     if (!file.open(QIODevice::ReadOnly)) {
-        return false;
+        return FileError;
     }
 
     QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
     file.close();
 
     if (!doc.isArray()) {
-        return false;
+        return FileError;
     }
+
     QJsonArray array = doc.array();
 
     for (int i = 0; i < array.size(); ++i) {
         if (array[i].toObject()["id"].toString() == id) {
-            return true;
+            return Duplicate;
         }
     }
-    return false;
+
+    return NotDuplicate;
 }
 
 bool SignupDialog::saveMember(const QString &name, const QString &id, const QString &pw)
 {
     QString path = SessionManager::getInstance().getMembersJsonPath();
     QFile file(path);
-    
+
     QJsonArray array;
-    if (file.open(QIODevice::ReadOnly)) {
-        array = QJsonDocument::fromJson(file.readAll()).array();
+
+    if (file.exists()) {
+        if (!file.open(QIODevice::ReadOnly)) {
+            return false;
+        }
+
+        QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
         file.close();
+
+        if (!doc.isArray()) {
+            return false;
+        }
+
+        array = doc.array();
     }
 
     QJsonObject newUser;
@@ -95,6 +130,7 @@ bool SignupDialog::saveMember(const QString &name, const QString &id, const QStr
     if (!file.open(QIODevice::WriteOnly)) {
         return false;
     }
+
     file.write(QJsonDocument(array).toJson());
     file.close();
     return true;
