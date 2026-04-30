@@ -27,12 +27,7 @@ private slots:
     void on_btnCancel_clicked();
 
 private:
-    // 입력한 ID가 이미 존재하는지 확인
-    // - 리턴: 중복이면 true, 사용 가능하면 false
-    bool isIdDuplicate(const QString &id);
-
-    // 신규 회원 정보를 JSON 파일에 저장
-    // - 리턴: 저장 성공 여부
+    int isIdDuplicate(const QString &id);
     bool saveMember(const QString &name, const QString &id, const QString &pw);
 
     Ui::SignupDialog *ui;                      // 회원가입 UI 포인터
